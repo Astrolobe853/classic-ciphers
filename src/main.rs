@@ -33,8 +33,9 @@ use crate::transposition::Transposition;
 use crate::vigenere_kasiski::VigenereKasiski;
 */
 
+use arboard::Clipboard;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -62,6 +63,8 @@ struct App {
     param_text: String,
     result_text: String,
     state: AppState,
+    key_visible: bool,
+    status_text: String,
 }
 
 impl App {
@@ -89,6 +92,8 @@ impl App {
             param_text: String::new(),
             result_text: String::new(),
             state: AppState::InputMode,
+            key_visible: true,
+            status_text: String::new(),
         }
     }
 
@@ -130,6 +135,35 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
+        if key.kind == KeyEventKind::Press && key.modifiers.contains(KeyModifiers::CONTROL) {
+            match key.code {
+                event::KeyCode::Char('v') | event::KeyCode::Char('V') => {
+                    if let Some(content) = self.read_clipboard() {
+                        match self.state {
+                            AppState::InputMode => self.input_text.push_str(&content),
+                            AppState::ParameterInputMode => self.param_text.push_str(&content),
+                            _ => {}
+                        }
+                        self.status_text = "Pasted clipboard text".to_string();
+                    } else {
+                        self.status_text = "Paste failed".to_string();
+                    }
+                    return;
+                }
+                event::KeyCode::Char('c') | event::KeyCode::Char('C') => {
+                    if matches!(self.state, AppState::ResultMode) && !self.result_text.is_empty() {
+                        if self.copy_to_clipboard(&self.result_text) {
+                            self.status_text = "Result copied to clipboard".to_string();
+                        } else {
+                            self.status_text = "Copy failed".to_string();
+                        }
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match self.state {
             AppState::InputMode => {
                 if key.kind == KeyEventKind::Press {
@@ -202,22 +236,34 @@ impl App {
                 if key.code == event::KeyCode::Enter || key.code == event::KeyCode::Esc {
                     self.state = AppState::InputMode;
                     self.result_text.clear();
+                } else if let event::KeyCode::Char(c) = key.code {
+                    if c.to_uppercase().to_string() == "K" {
+                        self.key_visible = !self.key_visible;
+                    }
                 }
             }
         }
+    }
+
+    fn copy_to_clipboard(&self, text: &str) -> bool {
+        Clipboard::new().ok().and_then(|mut clipboard| clipboard.set_text(text.to_string()).ok()).is_some()
+    }
+
+    fn read_clipboard(&self) -> Option<String> {
+        Clipboard::new().ok().and_then(|mut clipboard| clipboard.get_text().ok())
     }
 
     fn draw(&mut self, f: &mut ratatui::Frame) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(20),
-                Constraint::Percentage(40),
-                Constraint::Percentage(40),
+                Constraint::Percentage(15),
+                Constraint::Percentage(35),
+                Constraint::Percentage(50),
             ])
             .split(f.area());
 
-
+        // Input section
         let input_content = format!(
             "{} {}",
             self.input_text,
@@ -232,7 +278,9 @@ impl App {
                 .borders(Borders::ALL)
                 .title(" Message Input "),
         );
+        f.render_widget(input_block, chunks[0]);
 
+        // Algorithm selection section
         let items: Vec<ListItem> = self
             .algorithms
             .iter()
@@ -247,26 +295,75 @@ impl App {
             )
             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD));
 
-        f.render_widget(input_block, chunks[0]);
         f.render_stateful_widget(list, chunks[1], &mut self.list_state);
 
-        let hint = match self.state {
-            AppState::InputMode => "Press Enter to choose algorithm",
-            AppState::AlgorithmSelectionMode => "↑↓ navigate, Enter to select",
-            AppState::ParameterInputMode => "Enter key, press Enter when done",
-            AppState::ResultMode => "Enter/Esc to go back",
-        };
-        let hint_block =
-            Paragraph::new(hint).block(Block::default().borders(Borders::ALL).title(" Status "));
-        f.render_widget(hint_block, chunks[2]);
+        // Bottom section - split into Result and Key+Status
+        let bottom_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(chunks[2]);
 
-        if matches!(self.state, AppState::ResultMode) && !self.result_text.is_empty() {
-            f.render_widget(
-                Paragraph::new(self.result_text.as_str())
-                    .block(Block::default().borders(Borders::ALL).title(" Result ")),
-                chunks[1],
-            );
-        }
+        let right_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(bottom_chunks[1]);
+
+        // Result panel
+        let hint = match self.state {
+            AppState::InputMode => "Press Enter to choose algorithm | Ctrl+V paste",
+            AppState::AlgorithmSelectionMode => "↑↓ navigate, Enter to select",
+            AppState::ParameterInputMode => "Enter key, press Enter when done | Ctrl+V paste",
+            AppState::ResultMode => "K toggle key visibility | Ctrl+C copy result | Enter/Esc to go back",
+        };
+
+        f.render_widget(
+            Paragraph::new(self.result_text.as_str())
+                .block(Block::default().borders(Borders::ALL).title(" Result ")),
+            bottom_chunks[0],
+        );
+
+        let idx = self.list_state.selected().unwrap_or(0);
+        let alg = &self.algorithms[idx];
+
+        let key_content = if alg.requires_key() {
+            let key_display = if matches!(self.state, AppState::ResultMode) && !self.key_visible {
+                "•".repeat(self.param_text.len())
+            } else {
+                self.param_text.to_string()
+            };
+
+            let cursor = if matches!(self.state, AppState::ParameterInputMode) {
+                "█"
+            } else if matches!(self.state, AppState::ResultMode) && self.key_visible {
+                ""
+            } else if matches!(self.state, AppState::ResultMode) {
+                "🔒"
+            } else {
+                ""
+            };
+
+            format!("{}{}", key_display, cursor)
+        } else {
+            "No key required".to_string()
+        };
+
+        f.render_widget(
+            Paragraph::new(key_content)
+                .block(Block::default().borders(Borders::ALL).title(" Key ")),
+            right_chunks[0],
+        );
+
+        let status_content = if self.status_text.is_empty() {
+            hint.to_string()
+        } else {
+            self.status_text.clone()
+        };
+
+        f.render_widget(
+            Paragraph::new(status_content)
+                .block(Block::default().borders(Borders::ALL).title(" Status ")),
+            right_chunks[1],
+        );
     }
 }
 
