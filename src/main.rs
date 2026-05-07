@@ -1,8 +1,11 @@
-mod affine;
-mod atbash;
+
 mod caesar;
 mod cipher;
+mod vigenere;
+/*
 mod digraph_block;
+mod affine;
+mod atbash;
 mod hill;
 mod modular;
 mod one_time_pad;
@@ -10,13 +13,15 @@ mod playfair;
 mod polyalphabetic;
 mod rail_fence;
 mod transposition;
-mod vigenere;
 mod vigenere_kasiski;
+*/
 
+use crate::cipher::Cipher;
+use crate::caesar::Caesar;
+use crate::vigenere::Vigenere;
+/* 
 use crate::affine::Affine;
 use crate::atbash::Atbash;
-use crate::caesar::Caesar;
-use crate::cipher::Cipher;
 use crate::digraph_block::DigraphBlock;
 use crate::hill::Hill;
 use crate::modular::Modular;
@@ -25,8 +30,9 @@ use crate::playfair::Playfair;
 use crate::polyalphabetic::Polyalphabetic;
 use crate::rail_fence::RailFence;
 use crate::transposition::Transposition;
-use crate::vigenere::Vigenere;
 use crate::vigenere_kasiski::VigenereKasiski;
+*/
+
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind},
     execute,
@@ -36,6 +42,7 @@ use ratatui::{
     Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
     widgets::ListState,
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
@@ -64,6 +71,7 @@ impl App {
             algorithms: vec![
                 Box::new(Vigenere),
                 Box::new(Caesar),
+                /* 
                 Box::new(Modular),
                 Box::new(Atbash),
                 Box::new(VigenereKasiski),
@@ -75,6 +83,7 @@ impl App {
                 Box::new(Affine),
                 Box::new(Hill),
                 Box::new(OneTimePad),
+                */
             ],
             list_state: ListState::default(),
             param_text: String::new(),
@@ -208,7 +217,7 @@ impl App {
             ])
             .split(f.area());
 
-        // Input Field
+
         let input_content = format!(
             "{} {}",
             self.input_text,
@@ -224,23 +233,23 @@ impl App {
                 .title(" Message Input "),
         );
 
-        // Algorithm List
         let items: Vec<ListItem> = self
             .algorithms
             .iter()
             .map(|alg| ListItem::new(alg.name()))
             .collect();
 
-        let list = List::new(items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Select Algorithm "),
-        );
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Select Algorithm "),
+            )
+            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD));
 
         f.render_widget(input_block, chunks[0]);
         f.render_stateful_widget(list, chunks[1], &mut self.list_state);
 
-        // Result or state hint
         let hint = match self.state {
             AppState::InputMode => "Press Enter to choose algorithm",
             AppState::AlgorithmSelectionMode => "↑↓ navigate, Enter to select",
@@ -251,7 +260,6 @@ impl App {
             Paragraph::new(hint).block(Block::default().borders(Borders::ALL).title(" Status "));
         f.render_widget(hint_block, chunks[2]);
 
-        // Result text in ResultMode
         if matches!(self.state, AppState::ResultMode) && !self.result_text.is_empty() {
             f.render_widget(
                 Paragraph::new(self.result_text.as_str())
