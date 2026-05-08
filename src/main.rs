@@ -45,9 +45,9 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     widgets::ListState,
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
-use std::io;
+use std::{io, time::{Duration, Instant}};
 
 enum AppState {
     InputMode,
@@ -65,6 +65,7 @@ struct App {
     state: AppState,
     key_visible: bool,
     status_text: String,
+    status_updated: Option<Instant>,
 }
 
 impl App {
@@ -94,6 +95,7 @@ impl App {
             state: AppState::InputMode,
             key_visible: true,
             status_text: String::new(),
+            status_updated: None,
         }
     }
 
@@ -123,6 +125,13 @@ impl App {
                 self.draw(f);
             })?;
 
+            if let Some(updated) = self.status_updated {
+                if updated.elapsed() >= Duration::from_secs(1) {
+                    self.status_text.clear();
+                    self.status_updated = None;
+                }
+            }
+
             if event::poll(std::time::Duration::from_millis(16))? {
                 if let Event::Key(key_event) = event::read()? {
                     if key_event.code == event::KeyCode::Esc {
@@ -148,6 +157,7 @@ impl App {
                     } else {
                         self.status_text = "Paste failed".to_string();
                     }
+                    self.status_updated = Some(Instant::now());
                     return;
                 }
                 event::KeyCode::Char('c') | event::KeyCode::Char('C') => {
@@ -157,6 +167,7 @@ impl App {
                         } else {
                             self.status_text = "Copy failed".to_string();
                         }
+                        self.status_updated = Some(Instant::now());
                     }
                     return;
                 }
@@ -263,7 +274,7 @@ impl App {
             ])
             .split(f.area());
 
-        // Input section
+  
         let input_content = format!(
             "{} {}",
             self.input_text,
@@ -273,14 +284,16 @@ impl App {
                 ""
             }
         );
-        let input_block = Paragraph::new(input_content).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Message Input "),
-        );
+        let input_block = Paragraph::new(input_content)
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Message Input "),
+            );
         f.render_widget(input_block, chunks[0]);
 
-        // Algorithm selection section
+
         let items: Vec<ListItem> = self
             .algorithms
             .iter()
@@ -297,7 +310,6 @@ impl App {
 
         f.render_stateful_widget(list, chunks[1], &mut self.list_state);
 
-        // Bottom section - split into Result and Key+Status
         let bottom_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
@@ -308,7 +320,7 @@ impl App {
             .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
             .split(bottom_chunks[1]);
 
-        // Result panel
+    
         let hint = match self.state {
             AppState::InputMode => "Press Enter to choose algorithm | Ctrl+V paste",
             AppState::AlgorithmSelectionMode => "↑↓ navigate, Enter to select",
@@ -318,6 +330,7 @@ impl App {
 
         f.render_widget(
             Paragraph::new(self.result_text.as_str())
+                .wrap(Wrap { trim: false })
                 .block(Block::default().borders(Borders::ALL).title(" Result ")),
             bottom_chunks[0],
         );
