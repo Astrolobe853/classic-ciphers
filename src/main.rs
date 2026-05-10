@@ -1,4 +1,3 @@
-
 mod caesar;
 mod cipher;
 mod vigenere;
@@ -16,10 +15,10 @@ mod transposition;
 mod vigenere_kasiski;
 */
 
-use crate::cipher::Cipher;
 use crate::caesar::Caesar;
+use crate::cipher::Cipher;
 use crate::vigenere::Vigenere;
-/* 
+/*
 use crate::affine::Affine;
 use crate::atbash::Atbash;
 use crate::digraph_block::DigraphBlock;
@@ -35,7 +34,9 @@ use crate::vigenere_kasiski::VigenereKasiski;
 
 use arboard::Clipboard;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -47,7 +48,10 @@ use ratatui::{
     widgets::ListState,
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
-use std::{io, time::{Duration, Instant}};
+use std::{
+    io,
+    time::{Duration, Instant},
+};
 
 enum AppState {
     InputMode,
@@ -75,7 +79,7 @@ impl App {
             algorithms: vec![
                 Box::new(Vigenere),
                 Box::new(Caesar),
-                /* 
+                /*
                 Box::new(Modular),
                 Box::new(Atbash),
                 Box::new(VigenereKasiski),
@@ -257,11 +261,16 @@ impl App {
     }
 
     fn copy_to_clipboard(&self, text: &str) -> bool {
-        Clipboard::new().ok().and_then(|mut clipboard| clipboard.set_text(text.to_string()).ok()).is_some()
+        Clipboard::new()
+            .ok()
+            .and_then(|mut clipboard| clipboard.set_text(text.to_string()).ok())
+            .is_some()
     }
 
     fn read_clipboard(&self) -> Option<String> {
-        Clipboard::new().ok().and_then(|mut clipboard| clipboard.get_text().ok())
+        Clipboard::new()
+            .ok()
+            .and_then(|mut clipboard| clipboard.get_text().ok())
     }
 
     fn draw(&mut self, f: &mut ratatui::Frame) {
@@ -274,7 +283,6 @@ impl App {
             ])
             .split(f.area());
 
-  
         let input_content = format!(
             "{} {}",
             self.input_text,
@@ -293,7 +301,6 @@ impl App {
             );
         f.render_widget(input_block, chunks[0]);
 
-
         let items: Vec<ListItem> = self
             .algorithms
             .iter()
@@ -306,7 +313,11 @@ impl App {
                     .borders(Borders::ALL)
                     .title(" Select Algorithm "),
             )
-            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD));
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            );
 
         f.render_stateful_widget(list, chunks[1], &mut self.list_state);
 
@@ -320,12 +331,13 @@ impl App {
             .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
             .split(bottom_chunks[1]);
 
-    
         let hint = match self.state {
             AppState::InputMode => "Press Enter to choose algorithm | Ctrl+V paste",
             AppState::AlgorithmSelectionMode => "↑↓ navigate, Enter to select",
             AppState::ParameterInputMode => "Enter key, press Enter when done | Ctrl+V paste",
-            AppState::ResultMode => "K toggle key visibility | Ctrl+C copy result | Enter/Esc to go back",
+            AppState::ResultMode => {
+                "K toggle key visibility | Ctrl+C copy result | Enter/Esc to go back"
+            }
         };
 
         f.render_widget(
